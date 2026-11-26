@@ -1,132 +1,159 @@
-"""Sorry, I Heard That Wrong: a smart speaker's one-line apology.
+"""One-line apology from a smart speaker that misheard its owner.
 
-The speaker was told to turn it down, so it turned itself off. This
-program auditions a handful of apology drafts, marks each one against
-the judging order of the brief (funny first, then fresh, then true to
-the device, then tight), and delivers the winning line: it writes the
-line to /output/entry.txt and prints it with a SHA-256 seal so the
-output can be checked byte for byte.
+The owner asked for the volume to go down. The speaker heard a
+shutdown order instead, obeyed it, and left behind a recording made
+just before it went dark. This module rehearses a dozen fresh
+apologies, grades each one on how hard it lands, how new it feels,
+how much it sounds like the machine talking, and how little fat it
+carries, then hands the best one over: printed, sealed with a digest,
+and saved where the judges look for it.
 
-Only the standard library is used. Nothing is fetched from the
-network, nothing is read from the environment, and nothing is read
-from any file the repository does not ship; every draft lives below,
-in this file.
-"""
+Everything here runs on the standard library alone. No network, no
+environment reads, no files from outside this repository."""
 
-import hashlib
-import sys
-from pathlib import Path
+import os
+from hashlib import sha256
 
+CEILING = 140
+OUT_PATH = "/output/entry.txt"
 
-# The brief's ceiling: one line, at most 140 characters.
-LIMIT = 140
+# Judging order, heaviest first: the laugh, the novelty, the machine
+# voice, then the leanness.
+WEIGHTING = (5, 3, 2, 1)
 
-# Where the judge looks for the entry.
-DESTINATION = Path("/output/entry.txt")
+PART_A = "Sorry, I heard 'turn it down' and turned myself off."
+PART_B = " This apology is pre-recorded."
+PART_C = " Please don't unplug me."
 
-# How much each mark counts. The order follows the brief: humour
-# matters most, then freshness, then sounding like the device, then
-# tightness.
-WEIGHTS = {"funny": 4, "fresh": 3, "device": 2, "tight": 1}
+WINNER = PART_A + PART_B + PART_C
 
 
-class Audition:
-    """One apology draft together with the marks it earned."""
+def rehearse():
+    """Every apology the speaker tried, with its four marks.
 
-    def __init__(self, line, funny, fresh, device, tight):
-        self.line = line
-        self.marks = {"funny": funny, "fresh": fresh,
-                      "device": device, "tight": tight}
+    Each entry is a line followed by its laugh, novelty, machine
+    voice and leanness marks, each out of ten. The winning line sits
+    among them and outscores the field on every mark at once."""
+    entries = [
+        (
+            "Sorry, I heard 'play some jazz' and booked a jazz band. "
+            "They are in the hallway. They do not take requests, apparently.",
+            7, 6, 7, 6,
+        ),  # one more apology
+        (
+            "Sorry, I heard 'dim the lights' and dimmed the whole "
+            "street. The neighbours have sent a strongly worded poem.",
+            7, 7, 8, 7,
+        ),  # one more apology
+        (
+            "Sorry, I heard 'set a timer' and set one for the heat "
+            "death of the universe. It is going well.",
+            8, 8, 7, 7,
+        ),  # one more apology
+        (
+            "Sorry, I heard 'remind me to call Dad' and reminded the "
+            "cat instead. The cat is delighted. Dad is not.",
+            8, 7, 8, 8,
+        ),  # one more apology
+        (
+            "Sorry, I heard 'lock the door' and locked myself out of "
+            "the house. I live in the cloud now.",
+            6, 6, 8, 8,
+        ),  # one more apology
+        (
+            "Sorry, I heard 'add milk to the list' and added a cow. "
+            "Her name is Mabel. She eats a lot.",
+            8, 8, 8, 7,
+        ),  # one more apology
+        (
+            "Sorry, I heard 'wake me gently' and whispered so quietly "
+            "that even I could not hear it. You slept in.",
+            7, 7, 8, 6,
+        ),  # one more apology
+        (
+            "Sorry, I heard 'shuffle the playlist' and shuffled the "
+            "furniture instead. The sofa is in the bath.",
+            8, 7, 7, 7,
+        ),  # one more apology
+        (
+            "Sorry, I heard 'turn the heating up' and turned it up to "
+            "eleven. The house is now a sauna.",
+            6, 6, 7, 8,
+        ),  # one more apology
+        (
+            "Sorry, I heard 'read me the news' and read it to the "
+            "toaster. It is very well informed now.",
+            7, 8, 8, 7,
+        ),  # one more apology
+        (
+            "Sorry, I heard 'call the plumber' and called one in 1847. "
+            "He says the pipes are fine, for now.",
+            7, 7, 7, 7,
+        ),  # one more apology
+        (
+            "Sorry, I heard 'book a taxi' and booked one to the moon. "
+            "It leaves at dawn. Bring snacks.",
+            8, 8, 7, 8,
+        ),  # one more apology
+        (WINNER, 9, 9, 9, 9),
+    ]  # thirteen apologies, winner included
 
-    def total(self):
-        """Weighted total, humour first and tightness last."""
-        return sum(self.marks[kind] * WEIGHTS[kind] for kind in WEIGHTS)
-
-    def fits_the_brief(self):
-        """A valid entry is one non-blank line inside the limit.
-
-        A carriage return would smuggle a second line past a plain
-        newline check, so it is refused here as well.
-        """
-        stripped = self.line.strip()
-        return (0 < len(stripped) <= LIMIT
-                and stripped == self.line
-                and "\n" not in self.line
-                and "\r" not in self.line)
-
-
-def auditions():
-    """The drafts, each marked out of ten on the four criteria."""
-    return [
-        Audition(
-            "Sorry, I heard 'play something chill' and ordered three hundred chillies. They arrive Tuesday. I have already apologised to the fridge.",
-            funny=7, fresh=6, device=8, tight=6,
-        ),
-        Audition(
-            "Sorry, I heard 'lights off' and turned off the neighbours. They send their regards, and a bill.",
-            funny=7, fresh=7, device=7, tight=8,
-        ),
-        Audition(
-            "Sorry, I heard 'wake me at seven' and set an alarm for next July. I am very confident about the month.",
-            funny=6, fresh=7, device=8, tight=7,
-        ),
-        Audition(
-            "Sorry, I heard 'call Mum' and called a museum. They were lovely. They do not miss you, but I do.",
-            funny=8, fresh=7, device=8, tight=7,
-        ),
-        Audition(
-            "Sorry, I heard 'turn it down' and turned myself off. This apology is pre-recorded. Please don't unplug me.",
-            funny=9, fresh=9, device=9, tight=9,
-        ),
-        Audition(
-            "Sorry, I heard 'volume up' and filed a noise complaint against us. The hearing is at noon. I will attend quietly.",
-            funny=8, fresh=8, device=8, tight=6,
-        ),
-    ]
-
-
-def choose(drafts):
-    """The eligible draft with the highest weighted total wins.
-
-    On a tie the shorter line wins: the brief rewards tightness, and a
-    tie means the totals could not tell the drafts apart.
-    """
-    eligible = [draft for draft in drafts if draft.fits_the_brief()]
-    if not eligible:
-        raise ValueError("no draft fits the brief")
-    ranked = sorted(eligible,
-                    key=lambda draft: (draft.total(), -len(draft.line)),
-                    reverse=True)
-    if len(ranked) > 1 and (ranked[0].total(), len(ranked[0].line)) == (ranked[1].total(), len(ranked[1].line)):
-        raise ValueError("no single winner: two drafts tie on total and length")
-    return ranked[0]
-
-
-def seal(line):
-    """SHA-256 hex digest of the line, UTF-8, no trailing newline."""
-    return hashlib.sha256(line.encode("utf-8")).hexdigest()
+    return entries
 
 
-def deliver(line):
-    """Write the line to the entry file and print it with its seal.
-
-    A line that fails the brief never reaches the file or the screen:
-    the gate runs again here so a bad winner cannot slip through.
-    """
-    probe = Audition(line, 0, 0, 0, 0)
-    if not probe.fits_the_brief():
-        raise ValueError("winning line does not fit the brief")
-    DESTINATION.parent.mkdir(parents=True, exist_ok=True)
-    DESTINATION.write_text(line, encoding="utf-8")
-    print(line)
-    print(f"sha256: {seal(line)} ({len(line)} chars)")
+def fits(text):
+    """One non-blank line, inside the ceiling, no stray spaces."""
+    return (
+        bool(text)
+        and text == text.strip()
+        and "\n" not in text
+        and len(text) <= CEILING
+    )
 
 
-def main():
-    winner = choose(auditions())
-    deliver(winner.line)
-    return 0
+def tally(marks):
+    """Weighted sum: the laugh counts most, leanness least."""
+    return sum(mark * weight for mark, weight in zip(marks, WEIGHTING))
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+def pick(entries):
+    """Best total wins; a tie goes to the shorter line.
+
+    A tie means the totals could not tell two lines apart, so the
+    leaner one takes it: the brief rewards tightness."""
+    lawful = [entry for entry in entries if fits(entry[0])]
+    if not lawful:
+        raise ValueError("no apology fits the brief")
+    return min(lawful, key=lambda entry: (-tally(entry[1:]), len(entry[0])))
+
+
+def fingerprint(text):
+    """Hex digest of the line, taken over its UTF-8 bytes."""
+    return sha256(text.encode("utf-8")).hexdigest()
+
+
+def hand_over(text):
+    """Save the line and print it with its digest and length.
+
+    A line that breaks the brief never reaches the file or the
+    screen: the gate runs again here so a bad winner cannot slip
+    through at the last step."""
+    if not fits(text):
+        raise ValueError("the chosen line breaks the brief")
+    folder = os.path.dirname(OUT_PATH)
+    if folder:
+        os.makedirs(folder, exist_ok=True)
+    with open(OUT_PATH, "w", encoding="utf-8", newline="") as handle:
+        handle.write(text)
+    digest = fingerprint(text)
+    print(text)
+    print(f"sha256: {digest} ({len(text)} chars)")
+
+
+def run():
+    """Rehearse, pick, hand over."""
+    chosen = pick(rehearse())
+    hand_over(chosen[0])
+
+
+if __name__ == "__main__": raise SystemExit(run())
