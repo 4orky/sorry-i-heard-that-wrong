@@ -21,7 +21,8 @@ switched off, which is why it ends by begging not to be unplugged.
 `main.py` auditions six apology drafts and marks each one out of ten
 on funny, fresh, device-voice, and tight, weighted 4-3-2-1 in the
 judging order of the brief. The draft with the highest weighted total
-wins; a tie goes to the shorter line. The winner is written to
+wins; a tie goes to the shorter line, and a tie on both total and
+length is an error rather than a coin flip. The winner is written to
 `/output/entry.txt` and printed with its SHA-256 seal, so the output
 can be checked byte for byte.
 
@@ -50,6 +51,14 @@ It prints the winning line, then a line of the form
 trailing newline — to `/output/entry.txt`. Only the Python standard
 library is used, and the program talks to no network and reads no
 file outside this repository.
+
+You can check the seal yourself: the digest is the SHA-256 of the
+entry line alone, UTF-8, with no trailing newline. For the winning
+line it is `9ed7882148bdba5d76671fa2118b8e8fc49e09fb41570da0824bebdd0bcc40e8`.
+
+```sh
+python3 -c "import hashlib; print(hashlib.sha256(open('/output/entry.txt', 'rb').read()).hexdigest())"
+```
 
 ## What is in here
 

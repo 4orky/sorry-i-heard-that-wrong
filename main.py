@@ -43,11 +43,16 @@ class Audition:
         return sum(self.marks[kind] * WEIGHTS[kind] for kind in WEIGHTS)
 
     def fits_the_brief(self):
-        """A valid entry is one non-blank line inside the limit."""
+        """A valid entry is one non-blank line inside the limit.
+
+        A carriage return would smuggle a second line past a plain
+        newline check, so it is refused here as well.
+        """
         stripped = self.line.strip()
         return (0 < len(stripped) <= LIMIT
                 and stripped == self.line
-                and "\n" not in self.line)
+                and "\n" not in self.line
+                and "\r" not in self.line)
 
 
 def auditions():
@@ -89,7 +94,12 @@ def choose(drafts):
     eligible = [draft for draft in drafts if draft.fits_the_brief()]
     if not eligible:
         raise ValueError("no draft fits the brief")
-    return max(eligible, key=lambda draft: (draft.total(), -len(draft.line)))
+    ranked = sorted(eligible,
+                    key=lambda draft: (draft.total(), -len(draft.line)),
+                    reverse=True)
+    if len(ranked) > 1 and (ranked[0].total(), len(ranked[0].line)) == (ranked[1].total(), len(ranked[1].line)):
+        raise ValueError("no single winner: two drafts tie on total and length")
+    return ranked[0]
 
 
 def seal(line):
@@ -109,7 +119,7 @@ def deliver(line):
     DESTINATION.parent.mkdir(parents=True, exist_ok=True)
     DESTINATION.write_text(line, encoding="utf-8")
     print(line)
-    print("sha256: {} ({} chars)".format(seal(line), len(line)))
+    print(f"sha256: {seal(line)} ({len(line)} chars)")
 
 
 def main():
