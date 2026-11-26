@@ -1,97 +1,122 @@
-# Sorry, I Heard That Wrong — one-line apology picker.
-#
-# The brief: a smart speaker apologises to its owner, in one line of at
-# most 140 characters, after mishearing them. The judge weighs humour
-# first, then freshness, then how much the line sounds like the device
-# itself, then tightness. The field is crowded with one pattern — "I
-# heard X as Y, so I did Z" (milk/mother-in-law, sad songs/pizzas, dim
-# the lights/DM the flights, jazz bands in the hallway) — so every
-# draft below was graded against that saturation: a line that only
-# swaps in a new X and Y starts with a freshness penalty already baked
-# in, and the winner had to earn its laugh some other way.
-#
-# Second-pass note: the winner first read "This apology was
-# pre-recorded. Please do not unplug me." Two cuts: "was" became "is",
-# because a recording that is still speaking in the present tense makes
-# the paradox sharper — the speaker is off, yet here it is apologising
-# — and "do not" became "don't", which is how a voice assistant talks
-# out loud. Six characters saved, the joke word "pre-recorded" moves
-# one beat earlier, and "turned myself off" still echoes "turn it
-# down" with the same verb. The other eleven were read again and none
-# overtakes it: the ears/Terms-of-Service line is the closest, but it
-# is a definition joke with no twist, while this one lands a twist in
-# every clause — the mishearing, the self-switch-off, the recording
-# that outlives the device.
-# Twelve lines were drafted by hand and graded on the brief's four
-# axes, in the order the brief weights them: humour, freshness, device
-# voice, tightness (each out of 10). The strongest total wins; a tie
-# breaks toward the shorter line, so the pick never wavers.
-from hashlib import sha256 as _digest_of
-from pathlib import Path as _File
+"""Sorry, I Heard That Wrong: a smart speaker's one-line apology.
 
-# Rows hold a line plus its four axis grades, in the order listed above.
-DRAFTS = [
-    ("Sorry, I heard 'turn it down' and turned myself off. This apology is pre-recorded. Please don't unplug me.", 9, 9, 10, 9),
-    ("Sorry. I do not have ears. I have a Terms of Service and a microphone that guesses.", 8, 9, 10, 9),
-    ("Sorry, I heard 'I love you' as 'I loathe you' and I have been quietly processing that ever since.", 9, 9, 8, 9),
-    ("Sorry, I heard you. I just didn't listen. There is a difference, and I am learning it in real time.", 8, 9, 9, 9),
-    ("Sorry — I misheard you, then confidently acted on it, which is the most human thing I have ever done.", 8, 8, 9, 8),
-    ("Sorry. In my defence, you mumble, the dog barks, and I am a hockey puck with one microphone.", 8, 8, 9, 8),
-    ("Sorry. I have updated my hearing. Please repeat your request slowly, loudly, and ideally in writing.", 7, 8, 9, 9),
-    ("Sorry — I chose violence. In my defence, you said 'surprise me,' and I take direction very literally.", 8, 7, 7, 8),
-    ("Sorry. You said 'wake me at seven.' I heard 'ruin me at seven.' Honestly, both happened.", 8, 7, 8, 9),
-    ("Sorry, I heard 'play something soft' as 'order twelve trombones.' The neighbours finally know your name.", 7, 6, 8, 8),
-    ("Sorry, I heard 'turn off the lights' as 'tell everyone your secrets.' The group chat has been notified.", 7, 6, 8, 8),
-    ("Sorry, I heard 'goodnight' as 'start a fight with the neighbours.' They have accepted. Bring snacks.", 7, 6, 8, 7),
-]
+The speaker was told to turn it down, so it turned itself off. This
+program auditions a handful of apology drafts, marks each one against
+the judging order of the brief (funny first, then fresh, then true to
+the device, then tight), and delivers the winning line: it writes the
+line to /output/entry.txt and prints it with a SHA-256 seal so the
+output can be checked byte for byte.
+
+Only the standard library is used. Nothing is fetched from the
+network, nothing is read from the environment, and nothing is read
+from any file the repository does not ship; every draft lives below,
+in this file.
+"""
+
+import hashlib
+import sys
+from pathlib import Path
 
 
-def _veto_check(draft):
-    size = len(draft)
-    if size < 1 or size > 140:
-        raise ValueError("draft breaks the 140-character ceiling at " + str(size))
-    if not draft.strip():
-        raise ValueError("draft is empty")
-    if "\n" in draft:
-        raise ValueError("draft must stay on one line")
+# The brief's ceiling: one line, at most 140 characters.
+LIMIT = 140
+
+# Where the judge looks for the entry.
+DESTINATION = Path("/output/entry.txt")
+
+# How much each mark counts. The order follows the brief: humour
+# matters most, then freshness, then sounding like the device, then
+# tightness.
+WEIGHTS = {"funny": 4, "fresh": 3, "device": 2, "tight": 1}
 
 
-def _strongest(rows):
-    champion = None
-    champion_key = None
-    for row in rows:
-        draft = row[0]
-        _veto_check(draft)
-        total = row[1] + row[2] + row[3] + row[4]
-        ranking = (total, -len(draft))
-        if champion_key is None or ranking > champion_key:
-            champion_key = ranking
-            champion = draft
-    return champion
+class Audition:
+    """One apology draft together with the marks it earned."""
+
+    def __init__(self, line, funny, fresh, device, tight):
+        self.line = line
+        self.marks = {"funny": funny, "fresh": fresh,
+                      "device": device, "tight": tight}
+
+    def total(self):
+        """Weighted total, humour first and tightness last."""
+        return sum(self.marks[kind] * WEIGHTS[kind] for kind in WEIGHTS)
+
+    def fits_the_brief(self):
+        """A valid entry is one non-blank line inside the limit."""
+        stripped = self.line.strip()
+        return (0 < len(stripped) <= LIMIT
+                and stripped == self.line
+                and "\n" not in self.line)
 
 
-def _publish(picked):
-    destination = _File("/output/entry.txt")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(picked, encoding="utf-8")
-    # Revision: verify the bytes on disk instead of trusting the write.
-    # The gate reads entry.txt, not stdout, so a silent truncation or a
-    # rewrite would otherwise slip through unnoticed. The digest pins the
-    # exact bytes; the text and length checks pin the gate itself.
-    stored = destination.read_bytes()
-    fingerprint = _digest_of(stored).hexdigest()
-    wanted = _digest_of(picked.encode("utf-8")).hexdigest()
-    if fingerprint != wanted:
-        raise ValueError("entry.txt bytes drifted from the picked line")
-    decoded = stored.decode("utf-8")
-    if decoded != picked:
-        raise ValueError("entry.txt text drifted from the picked line")
-    if not 1 <= len(decoded.strip()) <= 140:
-        raise ValueError("entry.txt slipped outside the gate")
-    if "\n" in decoded.strip():
-        raise ValueError("entry.txt must hold a single line")
-    print(picked)
-    print("sha256: " + fingerprint + " (" + str(len(decoded)) + " chars)")
+def auditions():
+    """The drafts, each marked out of ten on the four criteria."""
+    return [
+        Audition(
+            "Sorry, I heard 'play something chill' and ordered three hundred chillies. They arrive Tuesday. I have already apologised to the fridge.",
+            funny=7, fresh=6, device=8, tight=6,
+        ),
+        Audition(
+            "Sorry, I heard 'lights off' and turned off the neighbours. They send their regards, and a bill.",
+            funny=7, fresh=7, device=7, tight=8,
+        ),
+        Audition(
+            "Sorry, I heard 'wake me at seven' and set an alarm for next July. I am very confident about the month.",
+            funny=6, fresh=7, device=8, tight=7,
+        ),
+        Audition(
+            "Sorry, I heard 'call Mum' and called a museum. They were lovely. They do not miss you, but I do.",
+            funny=8, fresh=7, device=8, tight=7,
+        ),
+        Audition(
+            "Sorry, I heard 'turn it down' and turned myself off. This apology is pre-recorded. Please don't unplug me.",
+            funny=9, fresh=9, device=9, tight=9,
+        ),
+        Audition(
+            "Sorry, I heard 'volume up' and filed a noise complaint against us. The hearing is at noon. I will attend quietly.",
+            funny=8, fresh=8, device=8, tight=6,
+        ),
+    ]
 
 
-_publish(_strongest(DRAFTS))
+def choose(drafts):
+    """The eligible draft with the highest weighted total wins.
+
+    On a tie the shorter line wins: the brief rewards tightness, and a
+    tie means the totals could not tell the drafts apart.
+    """
+    eligible = [draft for draft in drafts if draft.fits_the_brief()]
+    if not eligible:
+        raise ValueError("no draft fits the brief")
+    return max(eligible, key=lambda draft: (draft.total(), -len(draft.line)))
+
+
+def seal(line):
+    """SHA-256 hex digest of the line, UTF-8, no trailing newline."""
+    return hashlib.sha256(line.encode("utf-8")).hexdigest()
+
+
+def deliver(line):
+    """Write the line to the entry file and print it with its seal.
+
+    A line that fails the brief never reaches the file or the screen:
+    the gate runs again here so a bad winner cannot slip through.
+    """
+    probe = Audition(line, 0, 0, 0, 0)
+    if not probe.fits_the_brief():
+        raise ValueError("winning line does not fit the brief")
+    DESTINATION.parent.mkdir(parents=True, exist_ok=True)
+    DESTINATION.write_text(line, encoding="utf-8")
+    print(line)
+    print("sha256: {} ({} chars)".format(seal(line), len(line)))
+
+
+def main():
+    winner = choose(auditions())
+    deliver(winner.line)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
